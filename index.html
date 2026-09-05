@@ -146,7 +146,7 @@ function render(){
   const ageAgg={};
   rows.forEach(x=>ageAgg[x.rango_etario]=(ageAgg[x.rango_etario]||0)+Number(x.consulta_cantidad||0));
   const topAge=Object.entries(ageAgg).sort((a,b)=>b[1]-a[1])[0];
-  document.getElementById('topAge').textContent=topAge ? topAge[0] : '—';
+  document.getElementById('topAge').textContent=topAge ? displayText(topAge[0]) : '—';
 
   const monthAgg={};
   rows.forEach(x=>{
@@ -170,7 +170,7 @@ function render(){
   destroy('ageChart');
   charts.ageChart=new Chart(document.getElementById('ageChart'),{
     type:'doughnut',
-    data:{labels:Object.keys(ageAgg),datasets:[{data:Object.values(ageAgg)}]},
+    data:{labels:Object.keys(ageAgg).map(displayText),datasets:[{data:Object.values(ageAgg)}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}
   });
 
