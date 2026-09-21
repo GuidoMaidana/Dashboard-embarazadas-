@@ -236,7 +236,7 @@ h1{font-size:30px;margin:5px 0 4px;letter-spacing:-.7px}
     <div class="maphead">
       <div>
         <h2>Mapa de establecimientos · Capital</h2>
-        <div class="note" style="margin:3px 0 0">Vista acotada al ejido urbano de la ciudad de Corrientes. El tamaño de los puntos violetas refleja las consultas del filtro activo.</div>
+        <div class="note" style="margin:3px 0 0">Vista fija del ejido urbano de la ciudad de Corrientes. El tamaño de los puntos violetas refleja las consultas del filtro activo.</div>
       </div>
       <div class="mapactions" role="group" aria-label="Capas del mapa">
         <button class="mapbtn" type="button" data-layer="saps" aria-pressed="true"><i class="dot" style="background:#7c3aed"></i>SAPS</button>
@@ -244,7 +244,6 @@ h1{font-size:30px;margin:5px 0 4px;letter-spacing:-.7px}
         <button class="mapbtn" type="button" data-layer="hospitales" aria-pressed="true"><i class="dot" style="background:#ef4444"></i>Hospitales</button>
         <button class="mapbtn" type="button" data-layer="centros" aria-pressed="true"><i class="dot" style="background:#f59e0b"></i>Centros privados</button>
         <button class="mapbtn" type="button" data-layer="zonas" aria-pressed="true"><i class="dot" style="background:#64748b"></i>Áreas</button>
-        <button class="mapbtn" type="button" id="recenter">Centrar</button>
       </div>
     </div>
     <div id="map" class="mapwrap" role="application" aria-label="Mapa de establecimientos de salud de la ciudad de Corrientes"></div>
@@ -282,7 +281,7 @@ h1{font-size:30px;margin:5px 0 4px;letter-spacing:-.7px}
         <li><a href="https://datos.ciudaddecorrientes.gov.ar/dataset/atencion_embarazadas" target="_blank" rel="noopener noreferrer">Atención de embarazadas — Datos Abiertos, Ciudad de Corrientes</a></li>
         <li><a href="https://datos.ciudaddecorrientes.gov.ar/dataset/centros-de-salud" target="_blank" rel="noopener noreferrer">Centros de salud — Datos Abiertos, Ciudad de Corrientes</a></li>
       </ul>
-      <p style="margin-top:12px;font-size:12px">Cartografía base: OpenStreetMap y CARTO. Los puntos representan únicamente las coordenadas presentes en los archivos publicados.</p>
+      <p style="margin-top:12px;font-size:12px">Cartografía base: OpenStreetMap. Los puntos representan únicamente las coordenadas presentes en los archivos publicados.</p>
     </div>
   </div>
   <div class="footbar">
@@ -591,11 +590,11 @@ var CAP_BOUNDS = [[CAP.s, CAP.w], [CAP.n, CAP.e]];
 function inCapital(lat, lng) {
   return lat >= CAP.s && lat <= CAP.n && lng >= CAP.w && lng <= CAP.e;
 }
-var TILES = {
-  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-};
-var ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+/* Teselas estándar de OpenStreetMap: no requieren API key. Para el modo oscuro
+   no existe una fuente gratuita sin key, así que se invierten con un filtro CSS
+   sobre el mismo mosaico (truco habitual de Leaflet), en vez de pedir claves. */
+var TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+var ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 var map, tiles, layers = {}, zoneLayer, sapsPoints = [];
 
 /* Coincidencia difusa entre los nombres de la base de consultas y los de la base
@@ -696,17 +695,14 @@ function refreshSapsMarkers() {
 
 function styleMap() {
   if (!map) return;
-  var t = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-  var next = L.tileLayer(TILES[t], {
-    minZoom: 11, maxZoom: 18, noWrap: true, bounds: L.latLngBounds(CAP_BOUNDS), attribution: ATTR
-  });
-  next.addTo(map);
-  next.bringToBack();
-  if (tiles) map.removeLayer(tiles);
-  tiles = next;
+  var dark = root.getAttribute('data-theme') === 'dark';
+  /* El contenedor de teselas se invierte en modo oscuro; el mosaico en sí es
+     siempre el mismo, así que no hay que volver a pedirlo al cambiar de tema. */
+  var pane = map.getPane('tilePane');
+  if (pane) pane.style.filter = dark ? 'invert(1) hue-rotate(180deg) brightness(.94) contrast(.92) saturate(.9)' : '';
   if (zoneLayer) {
     zoneLayer.setStyle({
-      color: css('--slate'), weight: 1.5, fillOpacity: t === 'dark' ? .1 : .07, dashArray: '5 5'
+      color: css('--slate'), weight: 1.5, fillOpacity: dark ? .12 : .07, dashArray: '5 5'
     });
   }
 }
@@ -716,17 +712,24 @@ function initMap() {
     $('map').innerHTML = '<div class="empty" style="padding:40px">No se pudo cargar la librería del mapa. Revisá la conexión e intentá de nuevo.</div>';
     return;
   }
+  /* Vista fija de la capital, sin que el usuario pueda arrastrarla ni alejarla:
+     se comporta como el botón "Ver Capital" del dashboard original, pero como
+     estado permanente en vez de una acción. */
   map = L.map('map', {
-    scrollWheelZoom: false,          /* no secuestra el scroll de la página */
-    maxBounds: L.latLngBounds(CAP_BOUNDS).pad(0.05),
-    maxBoundsViscosity: 1,
-    minZoom: 11, maxZoom: 18,
+    dragging: false,
+    touchZoom: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    zoomControl: false,
+    tap: false,
+    attributionControl: true,
     worldCopyJump: false
   });
-  map.fitBounds(L.latLngBounds(CAP_BOUNDS), { padding: [10, 10] });
+  L.tileLayer(TILE_URL, { minZoom: 3, maxZoom: 18, attribution: ATTR }).addTo(map);
+  map.fitBounds(L.latLngBounds(CAP_BOUNDS), { padding: [24, 24] });
   styleMap();
-  map.on('click focus', function () { map.scrollWheelZoom.enable(); });
-  map.on('mouseout', function () { map.scrollWheelZoom.disable(); });
 
   /* Áreas programáticas */
   var feats = (D.zonas || []).filter(function (z) { return z && z.geometry; }).map(function (z) {
@@ -766,11 +769,11 @@ function initMap() {
       else { g.addTo(map); if (key === 'zonas') g.bringToBack(); }
     });
   });
-  $('recenter').addEventListener('click', function () {
-    map.fitBounds(L.latLngBounds(CAP_BOUNDS), { padding: [10, 10] });
-  });
-
-  window.addEventListener('resize', function () { map.invalidateSize(); });
+  var refit = function () {
+    map.invalidateSize();
+    map.fitBounds(L.latLngBounds(CAP_BOUNDS), { padding: [24, 24] });
+  };
+  window.addEventListener('resize', refit);
   refreshSapsMarkers();
 }
 
